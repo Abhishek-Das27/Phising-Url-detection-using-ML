@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhishShield // ML URL Analyzer</title>
+    <!-- Modern Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icon Library Development CDN -->
+     <link href="style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --bg-base: #0B0F19;
+            --bg-surface: #1E2640;
+            --accent-primary: #3B82F6;
+            --text-main: #F3F4F6;
+            --text-muted: #9CA3AF;
+            --color-safe: #10B981;
+            --color-warning: #F59E0B;
+            --color-danger: #EF4444;
+            --border: rgba(255, 255, 255, 0.08);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { background-color: var(--bg-base); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+
+        .app-container { width: 100%; max-width: 720px; }
+        
+        /* Header branding styles */
+        .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 2rem; }
+        .brand h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.05em; }
+        .brand span { color: var(--accent-primary); }
+
+        /* Search glass container card */
+        .search-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); margin-bottom: 24px; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .search-card:focus-within { border-color: var(--accent-primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+        
+        .input-group { display: flex; gap: 12px; }
+        .input-wrapper { position: relative; flex: 1; display: flex; align-items: center; }
+        .input-icon { position: absolute; left: 16px; color: var(--text-muted); }
+        
+        input[type="url"] { width: 100%; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 16px 48px; color: #fff; font-size: 1rem; outline: none; transition: border 0.2s; }
+        
+        button { background: var(--accent-primary); color: white; border: none; border-radius: 12px; padding: 0 24px; font-weight: 600; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: filter 0.2s; }
+        button:hover { filter: brightness(1.1); }
+
+        /* Result Panel Components */
+        .result-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: none; opacity: 0; transform: translateY(10px); transition: all 0.4s ease; }
+        .result-card.active { display: block; opacity: 1; transform: translateY(0); }
+        
+        .verdict-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+        .verdict-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 16px; border-radius: 99px; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; }
+        
+        /* Metric feature breakdown block styles */
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; }
+        .metric-tile { background: rgba(0, 0, 0, 0.15); border: 1px solid var(--border); padding: 16px; border-radius: 12px; }
+        .metric-label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px; }
+        .metric-value { font-size: 1.25rem; font-weight: 700; }
+
+        /* Color state injection utility classes */
+        .state-safe { color: var(--color-safe); background: rgba(16, 185, 129, 0.1); }
+        .state-danger { color: var(--color-danger); background: rgba(239, 68, 68, 0.1); }
+        
+        /* Quick utility loader */
+        .spinner { animation: spin 1s linear infinite; display: none; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="brand">
+        <i data-lucide="shield-check" style="width:28px; height:28px; color:#3B82F6;"></i>
+        <h1>Phish<span>Shield</span></h1>
+    </div>
+
+    <div class="search-card">
+        <form id="analyzeForm" onsubmit="analyzeURL(event)">
+            <div class="input-group">
+                <div class="input-wrapper">
+                    <i data-lucide="link" class="input-icon" style="width:20px; height:20px;"></i>
+                    <input type="url" id="urlInput" placeholder="Paste full system URL path here..." required>
+                </div>
+                <button type="submit">
+                    <i data-lucide="search" style="width:18px; height:18px;"></i>
+                    <i data-lucide="loader-2" class="spinner" id="btnLoader" style="width:18px; height:18px;"></i>
+                    <span>Analyze</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Dynamic Output Area -->
+    <div class="result-card" id="resultCard">
+        <div class="verdict-header">
+            <div>
+                <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 4px;">Analysis Target Verdict</p>
+                <h3 id="displayUrl" style="font-size: 1.1rem; font-weight: 500; word-break: break-all; max-width: 450px;">-</h3>
+            </div>
+            <div id="verdictBadge" class="verdict-badge">
+                <span id="verdictText">Processing</span>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-tile">
+                <div class="metric-label">Risk Probability</div>
+                <div class="metric-value" id="valRisk">-</div>
+            </div>
+            <div class="metric-tile">
+                <div class="metric-label">URL Length</div>
+                <div class="metric-value" id="valLength">-</div>
+            </div>
+            <div class="metric-tile">
+                <div class="metric-label">Hyphen Count</div>
+                <div class="metric-value" id="valHyphens">-</div>
+            </div>
+            <div class="metric-tile">
+                <div class="metric-label">IP Address?</div>
+                <div class="metric-value" id="valIp">-</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Frontend Controller Logic -->
+<script>
+    // Initialize icons instantly
+    lucide.createIcons();
+
+    async function analyzeURL(event) {
+        event.preventDefault();
+        const urlValue = document.getElementById('urlInput').value;
+        const loader = document.getElementById('btnLoader');
+        const card = document.getElementById('resultCard');
+
+        // Toggle clean animation states
+        loader.style.display = 'block';
+        card.classList.remove('active');
+
+        try {
+            const response = await fetch('http://127.0.0.1:5000/api/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: urlValue })
+            });
+            const data = await response.json();
+
+            // Populate text elements
+            document.getElementById('displayUrl').innerText = data.url;
+            document.getElementById('valRisk').innerText = (data.features.risk_score * 100).toFixed(0) + '%';
+            document.getElementById('valLength').innerText = data.features.length;
+            document.getElementById('valHyphens').innerText = data.features.qty_hyphens;
+            document.getElementById('valIp').innerText = data.features.has_ip ? 'YES' : 'NO';
+
+            // State styling switches
+            const badge = document.getElementById('verdictBadge');
+            const vText = document.getElementById('verdictText');
+            
+            badge.className = 'verdict-badge '; // reset base class
+            if (data.verdict === 'Phishing') {
+                badge.classList.add('state-danger');
+                vText.innerText = 'Malicious Link';
+            } else {
+                badge.classList.add('state-safe');
+                vText.innerText = 'Safe Link';
+            }
+
+            card.classList.add('active');
+        } catch (error) {
+            alert('Failed connecting to ML local backend routing.');
+        } finally {
+            loader.style.display = 'none';
+        }
+    }
+</script>
+</body>
+</html>
